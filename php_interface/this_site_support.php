@@ -1,0 +1,1 @@
+&copy <a href="http://ysg.bz/" target="_blank" title="Продвижение сайта" rel="nofollow">Продвижение сайта YSG.bz</a></p>
