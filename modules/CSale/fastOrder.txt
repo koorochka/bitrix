@@ -1,0 +1,97 @@
+    /**
+     * fast buy function
+     * @param $PRODUCT
+     * @return bool|int
+     */
+    protected function fastOrder($PRODUCT_ID, $USER_ID, $ACCOUNT, $PROPERTIES=array(), $PAY_SYSTEM_ID=1, $PERSON_TYPE_ID=1)
+    {
+        # удалить этот товар, если есть в корзине
+        $db_res = CSaleBasket::GetList(
+            array("ID" => "ASC"),
+            array(
+                "PRODUCT_ID" => $PRODUCT_ID,
+                "FUSER_ID" => CSaleBasket::GetBasketUserID(),
+                "LID" => SITE_ID,
+                "ORDER_ID" => "NULL"
+            ),
+            false,
+            false,
+            array( "ID", "SET_PARENT_ID", "TYPE" )
+        );
+        while ($arBasketItem = $db_res->Fetch())
+        {
+            if (
+            !( intval($arBasketItem["SET_PARENT_ID"]) > 0 && empty($arBasketItem["TYPE"] ) )
+            )
+            {
+                CSaleBasket::Delete($arBasketItem["ID"]);
+            }
+        }
+
+        # добавить товар в корзину себе
+        $ID = Add2BasketByProductID($PRODUCT_ID, 1);
+
+        if($ID)
+        {
+            // найти товар в корзине. Узнать цену.
+            $dbBasketItems = CSaleBasket::GetList(
+                array(    "NAME" => "ASC",
+                    "ID" => "ASC"
+                ),
+                array(
+                    "ID" => $ID
+                ),
+                false,
+                false
+            );
+            if( $arBasketItem = $dbBasketItems->Fetch() )
+            {
+                # fill the params
+                $arOrderParams = array(
+                    "LID" => SITE_ID,
+                    "PERSON_TYPE_ID" => $PERSON_TYPE_ID,
+                    "CANCELED" => "N",
+                    "STATUS_ID" => "P",
+                    "PAYED" => "Y",
+                    "PRICE" => $arBasketItem["PRICE"],
+                    "SUM_PAID" => $arBasketItem["PRICE"],
+                    "CURRENCY" => $arBasketItem["CURRENCY"],
+                    "USER_ID" => $USER_ID,
+                    "PAY_SYSTEM_ID" => $PAY_SYSTEM_ID,
+                    //"DELIVERY_ID" => 1
+                );
+                # set order
+                $ORDER_ID = CSaleOrder::Add($arOrderParams);
+
+                /**
+                 * add properties to order
+                 */
+                $props = CSaleOrderProps::GetList(
+                    array(),
+                    array("PERSON_TYPE_ID" => $PERSON_TYPE_ID),
+                    false,
+                    false,
+                    array("ID", "NAME", "CODE"));
+                while ($prop = $props->Fetch())
+                {
+                    $arFields = array(
+                        "ORDER_ID" => $ORDER_ID,
+                        "ORDER_PROPS_ID" => $prop["ID"],
+                        "NAME"=> $prop["NAME"],
+                        "CODE" => $prop["CODE"],
+                        "VALUE" => $PROPERTIES[$prop["CODE"]]
+                    );
+                    CSaleOrderPropsValue::Add($arFields);
+                }
+
+                /**
+                 * add busket to order
+                 */
+                CSaleBasket::Update($ID, array("ORDER_ID" => $ORDER_ID));
+
+                return $ORDER_ID;
+
+            }
+        }
+        return false;
+    }
